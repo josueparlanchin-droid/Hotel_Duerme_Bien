@@ -106,6 +106,18 @@ function crearApp(db, config, deps = {}) {
   api.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   api.use(csrf);
 
+  // ---------- Sonda de salud (health check de Render/Vercel) ----------
+  // Pública y sin autenticación: confirma que el proceso responde y que MongoDB está accesible.
+  api.get('/health', wrap(async (_req, res) => {
+    try {
+      await db.database.command({ ping: 1 });
+      res.json({ ok: true, db: 'ok', app: 'duerme-bien' });
+    } catch (e) {
+      console.error('[health] MongoDB no responde:', e.message);
+      res.status(503).json({ ok: false, db: 'error', app: 'duerme-bien' });
+    }
+  }));
+
   // ---------- Autenticación ----------
   api.post('/auth/login', limiteLogin, wrap(async (req, res, next) => {
     const { username, password } = req.body ?? {};

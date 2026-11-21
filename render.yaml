@@ -1,0 +1,34 @@
+# Blueprint de Render: crea el Web Service con un clic desde el repositorio.
+# Documentacion: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: hotel-duerme-bien
+    runtime: node
+    plan: free
+    branch: main
+    # region: oregon   <- poner la MISMA region que el cluster de Atlas (Atlas > Overview)
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGODB_DB
+        value: duerme_bien
+      - key: MONGODB_URI
+        sync: false          # se define en el panel: es un secreto, nunca en el repositorio
+      - key: SESSION_SECRET
+        generateValue: true  # Render genera un valor aleatorio
+      - key: HOTEL_NOMBRE
+        value: Hotel Duerme Bien Ltda.
+      - key: HOTEL_RUT
+        value: 76543210-3
+      - key: HOTEL_CALLE
+        value: Av. Drake 1234
+      - key: HOTEL_COMUNA
+        value: Viña del Mar
+      - key: HOTEL_TELEFONO
+        value: +56 32 210 1234

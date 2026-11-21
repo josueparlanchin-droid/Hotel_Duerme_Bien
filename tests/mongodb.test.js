@@ -35,6 +35,12 @@ test('Integración completa MongoDB (requiere replica set y MONGODB_TEST_URI)',{
   const tercero={nombreCompleto:'Carla Fuentes Soto',rut:rutDe('12345670')};
   const cuarto={nombreCompleto:'Marta Fuentes Soto',rut:rutDe('12345671')};
 
+  await t.test('INT-00: health check publico con ping a MongoDB',async()=>{
+    const r=await agent.get('/api/health');
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    assert.equal(r.body.ok,true);
+    assert.equal(r.body.db,'ok');
+  });
   await t.test('INT-01: solo número natural para habitación (API)',async()=>{
     for(const numero of ['ABC','12-3','0','123.4','-8']) {
       const r=await post('/api/habitaciones',{numero,tipo:'DOBLE',orientacion:'VISTA_MAR'});

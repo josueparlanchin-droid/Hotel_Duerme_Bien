@@ -81,6 +81,68 @@ Comprobar la conexión desde la terminal:
 mongosh "mongodb://127.0.0.1:27017/?replicaSet=rs0" --eval "db.runCommand({ping:1})"
 ```
 
+## Despliegue
+
+El proyecto se despliega **completo** (SPA + API) en una sola plataforma: no se deben separar en
+dominios distintos porque la cookie de sesión es `SameSite=Strict` y un XHR hacia otro dominio no
+la enviaría (el login fallaría).
+
+Antes de desplegar, en **MongoDB Atlas → Network Access** habilite *Allow access from anywhere*
+(`0.0.0.0/0`): las IP de salida de Render y Vercel son dinámicas. Anote la **región** del cluster
+(Atlas → Overview) para usarla en el servicio.
+
+Variables de entorno obligatorias en la plataforma:
+
+```
+NODE_ENV=production
+MONGODB_URI=mongodb+srv://<usuario>:<clave>@<cluster>/<base>
+MONGODB_DB=duerme_bien
+SESSION_SECRET=<cadena aleatoria de 32 caracteres o más>
+```
+
+Opcionales: `HOTEL_NOMBRE`, `HOTEL_RUT`, `HOTEL_CALLE`, `HOTEL_COMUNA`, `HOTEL_TELEFONO` (datos
+ficticios de la boleta), `PORT` (Render la inyecta) y `MONGODB_TEST_URI` (solo para las pruebas
+integradas). El archivo `.env` **no** se sube al repositorio: en Render se pueden importar las
+variables con *Add from .env* y en Vercel con `vercel env add`.
+
+### Render (recomendado)
+
+El repositorio incluye `render.yaml` (Blueprint), pero también puede crearse a mano:
+
+1. Render → `New` → **Web Service** → conectar GitHub → `josueparlanchin-droid/Hotel_Duerme_Bien`
+   (rama `main`).
+2. Runtime **Node**, Build Command `npm ci`, Start Command `npm start`, región igual a la de
+   Atlas, plan **Free**.
+3. *Advanced* → Health Check Path `/api/health`; *Environment* → las variables de arriba.
+4. Deploy → `https://<nombre>.onrender.com`.
+
+`GET /api/health` responde `{"ok":true,"db":"ok","app":"duerme-bien"}` y hace `ping` real a
+MongoDB: sirve de sonda de disponibilidad. El plan gratuito **se duerme a los 15 minutos** de
+inactividad y tarda ~1 minuto en volver a despertar (muestra una pantalla de carga).
+
+### Vercel
+
+Vercel detecta Express y sirve `public/` por CDN (la SPA queda en `/`); la API en `/api/*` la
+atiende la función `api/[...slug].js`, que reutiliza la conexión a MongoDB cacheada en
+`src/arranque.js`.
+
+```powershell
+npm i -g vercel
+vercel link                             # vincula el proyecto con el repositorio
+vercel env add MONGODB_URI production  # y MONGODB_DB, SESSION_SECRET
+vercel dev                              # prueba en local antes de subir
+vercel --prod                           # despliegue de producción
+```
+
+`NODE_ENV=production` lo define Vercel automáticamente. `vercel dev` permite comprobar que
+`/api/health` y `POST /api/auth/login` responden antes de publicar.
+
+### Antes de publicar
+
+- Cambie las credenciales de demostración (`admin` / `encargado` en `src/seed.js`) o defina las
+  suyas en la plataforma; nunca publique las de prueba.
+- `SESSION_SECRET` debe ser distinto en cada entorno y nunca debe versionarse en Git.
+
 ## Pruebas
 
 Pruebas de validación y flujo de negocio con repositorio simulado (sin servidor MongoDB):
