@@ -46,6 +46,12 @@ test('Integración completa MongoDB (requiere replica set y MONGODB_TEST_URI)',{
       habitaciones:[{habitacionId:id('101'),ocupantes:1,acompanantes:[]}]});
     assert.equal(r.status,400);
   });
+  await t.test('INT-02b: nombre sin apellido ("yo") es rechazado por la API',async()=>{
+    const r=await post('/api/asignaciones',{...entrada,pasajero:{nombreCompleto:'yo',rut:rutDe('11111112')},
+      habitaciones:[{habitacionId:id('105'),ocupantes:1,acompanantes:[]}]});
+    assert.equal(r.status,400,JSON.stringify(r.body));
+    assert.equal((await db.collection('habitaciones').findOne({numero:'105'})).estado,'DISPONIBLE');
+  });
   let grupoId,asignacionId;
   await t.test('INT-03: registra RUT del segundo pasajero en MongoDB',async()=>{
     const r=await post('/api/asignaciones',{...entrada,pasajero:primero,
@@ -78,6 +84,11 @@ test('Integración completa MongoDB (requiere replica set y MONGODB_TEST_URI)',{
     assert.equal(r.body.tarifaPorPersonaNoche,40000);
     assert.equal(r.body.total,160000);
     assert.equal(r.body.habitaciones[0].ocupantes[1].rut,segundo.rut);
+    // datos ficticios del emisor impresos en la boleta
+    assert.equal(r.body.emisor.nombre,'Hotel Duerme Bien Ltda.');
+    assert.ok(r.body.emisor.calle.length>3 && r.body.emisor.comuna.length>2);
+    assert.equal(r.body.responsable.nombre,primero.nombreCompleto);
+    assert.equal(r.body.responsable.rut,primero.rut);
   });
   await t.test('INT-07: check-out libera RUT y pasa a limpieza',async()=>{
     assert.equal((await post(`/api/asignaciones/${asignacionId}/checkout`,{})).status,200);

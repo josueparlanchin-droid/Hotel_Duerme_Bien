@@ -7,7 +7,7 @@ Sistema web para un hotel desarrollado con **Node.js + Express + MongoDB**. Incl
 | Solicitud | Implementación |
 |---|---|
 | Número de habitación solo natural positivo | Validación en interfaz y servidor: `1`, `101`, `204` válidos; `0`, `1A`, `-5`, `12-3`, `1.5` rechazados. |
-| Nombres de personas no pueden ser números | Validación de nombre y apellido del responsable y de **todos los acompañantes**. |
+| Nombres de personas no pueden ser números | Validación de nombre y apellido del responsable y de **todos los acompañantes**. Además el nombre completo exige **nombre y apellido** (mínimo dos palabras): entradas como `yo` o `Ana` se rechazan con un mensaje claro, para que no terminen impresas en la boleta. |
 | Nadie puede estar en dos habitaciones a la vez | Se verifica el RUT de cada ocupante y se bloquean registros simultáneos usando transacciones y un estado activo por pasajero. |
 | Representante de grupo | Un responsable identificado con nombre y RUT, que ocupa la primera habitación; cada habitación adicional incluye sus propios huéspedes identificados. |
 | $40.000 por persona y noche | `cantidad de ocupantes × noches × 40000`, por habitación y total del grupo. |
@@ -15,6 +15,8 @@ Sistema web para un hotel desarrollado con **Node.js + Express + MongoDB**. Incl
 | Imagen del hotel al inicio | Imagen SVG incluida en `/public/img/hotel.svg`, visible en el login. |
 | Fechas | Entrada (día del check-in), salida estimada posterior a entrada, cantidad de noches y fecha real de check-out. |
 | Boleta | Endpoint `GET /api/boletas/:grupoId` y página imprimible con responsable, RUT, huéspedes, habitaciones, fechas, cantidad, noches, tarifa, subtotal y total. Botón **Imprimir / Guardar como PDF**. Es un comprobante informativo, **no una boleta tributaria electrónica**. |
+| Datos del emisor en la boleta | La boleta imprime los datos **ficticios** del hotel: **Nombre**, **RUT**, **Calle**, comuna y teléfono. Vienen de `src/business/reglas.js` (`EMISOR`) y se pueden cambiar con las variables `HOTEL_NOMBRE`, `HOTEL_RUT`, `HOTEL_CALLE`, `HOTEL_COMUNA` y `HOTEL_TELEFONO`. No dependen de lo que escriba el usuario. |
+| Boleta inalterable | El nombre y RUT del responsable se leen del **snapshot del check-in** (`ocupantes_detalle`), no del registro vivo del pasajero: si la misma persona vuelve a registrarse con otro nombre, la boleta antigua conserva el nombre con el que se hizo el check-in. |
 | RUT del segundo pasajero | Al elegir 2 ocupantes aparece un campo obligatorio para el nombre y RUT del acompañante, guardado como pasajero independiente en MongoDB y vinculado a la estadía. |
 | Base de datos MongoDB | Elimina SQLite. Utiliza el driver oficial `mongodb`, colecciones `usuarios`, `pasajeros`, `habitaciones`, `asignaciones`, `auditoria`, `sesiones` y `contadores`. |
 
@@ -60,6 +62,24 @@ Abra **http://localhost:3000**. Para una base Atlas reemplace `MONGODB_URI` por 
 4. Aparece **Acompañante 1**. Complete **Nombre completo** y **RUT**. El servidor valida el dígito verificador.
 5. Asigne. Podrá revisar el RUT individual en **Pasajeros hospedados**, historial o **Boleta de estadía**.
 6. Para grupos de varias habitaciones, marque **Es un grupo**, agregue habitaciones y complete los acompañantes que corresponden a cada habitación. El representante queda contado en la primera habitación.
+
+## Conexión con MongoDB
+
+| Aspecto | Detalle |
+|---|---|
+| Variables | `MONGODB_URI` (cadena de conexión) y `MONGODB_DB` (nombre de la base, por defecto `duerme_bien`). Se leen de `.env` o del entorno; **la variable de entorno tiene prioridad** sobre el archivo `.env`. |
+| Conexión | `src/data/db.js` abre un único `MongoClient` (driver oficial `mongodb`), hace `ping` para confirmar que el servidor responde y crea los índices al arrancar. Si MongoDB no está disponible, la aplicación **no arranca** y muestra el error en consola (no queda a medias). |
+| Réplica set | **Obligatorio**: los check-ins y check-outs se guardan en transacciones (`withTransaction` con `readConcern: snapshot` y `writeConcern: majority`). Un MongoDB *standalone* no soporta transacciones: use Atlas, Docker con `--replSet rs0` o un `mongod` local con réplica. |
+| Colecciones | `usuarios`, `pasajeros`, `habitaciones`, `asignaciones`, `auditoria`, `sesiones` (TTL) y `contadores` (secuencias con `findOneAndUpdate`). |
+| Índices | `usuarios.username` y `usuarios.rut` únicos, `pasajeros.rut` único (evita duplicados de RUT), `habitaciones.numero` único entre las activas, `asignaciones` por habitación/estado y por `ocupantes_detalle.rut` (historial), `auditoria.fecha` y `sesiones.expire` con TTL (las sesiones vencidas se borran solas). |
+| Sesiones | Se guardan en la colección `sesiones` (`src/presentation/sessionStore.js`), no en memoria: el reinicio del servidor no cierra las sesiones y el tiempo de inactividad (20 min) se aplica también en la base. |
+| Integridad | `pasajeros.estancia_activa` se actualiza de forma condicional dentro de la transacción, por lo que una persona no puede quedar en dos habitaciones a la vez aunque dosargas lleguen al mismo tiempo. |
+
+Comprobar la conexión desde la terminal:
+
+```powershell
+mongosh "mongodb://127.0.0.1:27017/?replicaSet=rs0" --eval "db.runCommand({ping:1})"
+```
 
 ## Pruebas
 

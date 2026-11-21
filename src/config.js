@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config({ quiet: true });
+const { EMISOR } = require('./business/reglas');
 
 const esProd = process.env.NODE_ENV === 'production';
 const esTest = process.env.NODE_ENV === 'test';
@@ -10,6 +11,12 @@ const config = {
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/?replicaSet=rs0',
   MONGODB_DB: process.env.MONGODB_DB || 'duerme_bien',
   SESSION_SECRET: process.env.SESSION_SECRET || 'dev-secret-solo-para-desarrollo-local',
+  // Datos ficticios del emisor que aparecen en la boleta (nombre, RUT, calle, teléfono)
+  HOTEL_NOMBRE: process.env.HOTEL_NOMBRE || EMISOR.nombre,
+  HOTEL_RUT: process.env.HOTEL_RUT || EMISOR.rut,
+  HOTEL_CALLE: process.env.HOTEL_CALLE || EMISOR.calle,
+  HOTEL_COMUNA: process.env.HOTEL_COMUNA || EMISOR.comuna,
+  HOTEL_TELEFONO: process.env.HOTEL_TELEFONO || EMISOR.telefono,
   // Regla de negocio (CU-08): tarifa fija por pasajero asignado, solo informativa (RE-4)
   TARIFA_POR_PASAJERO: 40000,
   // ISO 27002: expiración de sesión por inactividad

@@ -34,3 +34,26 @@ const out=await svc.checkout(a.asignaciones[0].id,actor,'127.0.0.1');assert.equa
 assert.equal((await repos.pasajeros.porRut(p2.rut)).estancia_activa,null);
 assert.ok(true);
 });
+test('EV4-09: la boleta muestra los datos ficticios del emisor y conserva el snapshot del check-in',async()=>{
+ const rut=(x)=>`${x}-${V.calcularDv(x)}`;
+ const actor={id:1,username:'encargado'};
+ const num3=await repos.habitaciones.crear({numero:'103',tipo:'SIMPLE',orientacion:'VISTA_CIUDAD',capacidad_maxima:1});
+ const rAna=rut('15432167');
+ const payload={pasajero:{nombreCompleto:'Ana Torres Muñoz',rut:rAna},
+   fechaEntrada:V.hoyChile(),fechaSalidaEstimada:new Date(Date.now()+2*86400000).toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),
+   habitaciones:[{habitacionId:num3,ocupantes:1,acompanantes:[]}]};
+ const a=await svc.crear(payload,actor,'127.0.0.1');
+ const b=await svc.boleta(a.grupoId);
+ assert.equal(b.responsable.nombre,'Ana Torres Muñoz');
+ assert.equal(b.emisor.nombre,'Hotel Duerme Bien Ltda.');
+ assert.equal(b.emisor.rut,V.rut(b.emisor.rut));
+ assert.ok(b.emisor.calle.length>3);
+ // el pasajero vuelve a registrarse con otro nombre: la boleta anterior no debe cambiar
+ await svc.checkout(a.asignaciones[0].id,actor,'127.0.0.1');
+ const num4=await repos.habitaciones.crear({numero:'104',tipo:'SIMPLE',orientacion:'VISTA_MAR',capacidad_maxima:1});
+ await svc.crear({...payload,habitaciones:[{habitacionId:num4,ocupantes:1,acompanantes:[]}],
+   pasajero:{nombreCompleto:'Ana María Torres Muñoz',rut:rAna}},actor,'127.0.0.1');
+ const b2=await svc.boleta(a.grupoId);
+ assert.equal(b2.responsable.nombre,'Ana Torres Muñoz');
+ assert.equal((await repos.pasajeros.porRut(rAna)).nombre_completo,'Ana María Torres Muñoz');
+});

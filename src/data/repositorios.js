@@ -61,8 +61,12 @@ function crearRepos(db, session = null) {
     const porRep = new Map(reps.map((x) => [x.id, x]));
     return documentos.map((raw) => {
       const a = limpio(raw); const h = porHab.get(a.habitacion_id); const p = porRep.get(a.pasajero_id);
+      // El nombre y RUT del responsable se toman del snapshot del check-in (ocupantes_detalle)
+      // para que el historial y la boleta no cambien si el pasajero se vuelve a registrar.
+      const detalle = (a.ocupantes_detalle || []).find((d) => d && d.es_responsable);
       return { ...a, habitacion_numero: h?.numero, habitacion_tipo: h?.tipo,
-        pasajero_nombre: p?.nombre_completo, pasajero_rut: p?.rut };
+        pasajero_nombre: detalle?.nombre_completo ?? p?.nombre_completo,
+        pasajero_rut: detalle?.rut ?? p?.rut };
     });
   };
   const asignaciones = {

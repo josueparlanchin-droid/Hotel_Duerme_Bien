@@ -3,7 +3,7 @@
 const { MongoClient } = require('mongodb');
 
 async function abrirDb(config) {
-  const client = new MongoClient(config.MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
+  const client = new MongoClient(config.MONGODB_URI, { serverSelectionTimeoutMS: 8000, appName: 'duerme-bien' });
   try {
     await client.connect();
     const database = client.db(config.MONGODB_DB);
@@ -23,6 +23,9 @@ async function abrirDb(config) {
       close: () => client.close(),
     };
     await Promise.all([
+      // Los contadores se usan dentro de las transacciones: se crean antes para no depender de la
+      // creación implícita de colecciones dentro de una transacción (código 48 = ya existe).
+      database.createCollection('contadores').catch((e) => { if (e.code !== 48) throw e; }),
       db.collection('usuarios').createIndex({ username: 1 }, { unique: true }),
       db.collection('usuarios').createIndex({ rut: 1 }, { unique: true }),
       db.collection('pasajeros').createIndex({ rut: 1 }, { unique: true }),

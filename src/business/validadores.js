@@ -4,6 +4,9 @@ const { AppError } = require('../errors');
 
 const LETRAS = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
 const RE_NOMBRE = new RegExp(`^[${LETRAS}][${LETRAS}' .-]{1,99}$`);
+const RE_PALABRA = new RegExp(`^[${LETRAS}]+$`);
+// Inicial con punto, por ejemplo "J. Pérez Soto": se admite como palabra.
+const RE_INICIAL = new RegExp(`^[${LETRAS}]\\.$`);
 const RE_TEXTO = new RegExp(`^[${LETRAS}0-9' .,;-]*$`);
 const RE_USERNAME = /^[a-z0-9._-]{3,30}$/;
 const RE_EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
@@ -13,9 +16,20 @@ const RE_NUMERO_HAB = /^[1-9][0-9]{0,9}$/;
 const err = (msg) => new AppError(400, msg, 'VALIDACION');
 const limpiar = (s) => (typeof s === 'string' ? s.trim().replace(/\s+/g, ' ') : '');
 
+// Nombre completo de una persona: al menos dos palabras (nombre + apellido) y cada palabra
+// con 2 letras o más. Evita que en la boleta se impriman textos sin sentido como "yo" o "Ana".
 function nombre(v, campo = 'Nombre') {
   const s = limpiar(v);
   if (!RE_NOMBRE.test(s)) throw err(`${campo} inválido: solo letras, espacios, apóstrofes, puntos y guiones (2 a 100 caracteres).`);
+  const palabras = s.split(' ').filter(Boolean);
+  if (palabras.length < 2) throw err(`${campo} incompleto: debe indicar nombre y apellido (ejemplo: "Ana Torres Muñoz").`);
+  for (const p of palabras) {
+    if (RE_PALABRA.test(p)) {
+      if (p.length < 2) throw err(`${campo} inválido: cada palabra debe tener al menos 2 letras.`);
+    } else if (!RE_INICIAL.test(p)) {
+      throw err(`${campo} inválido: solo letras, apóstrofes, puntos y guiones en cada palabra.`);
+    }
+  }
   return s;
 }
 

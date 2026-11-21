@@ -199,7 +199,7 @@ async function vistaTablero(main) {
         return h('button', { class: `room r-${hab.estado}`, onclick: () => abrirDetalle(hab, a) },
           h('div', { class: 'num' }, hab.numero),
           h('div', { class: 'meta' }, `${TIPOS[hab.tipo]} · ${ORIENT[hab.orientacion]} · cap. ${hab.capacidad_maxima}`),
-          a ? h('div', { class: 'who2' }, a.pasajero_nombre.split(' ').slice(0, 2).join(' ')) : null,
+          a ? h('div', { class: 'who2' }, (a.pasajero_nombre || '—').split(' ').slice(0, 2).join(' ')) : null,
           h('span', { class: 'status' }, ESTADOS[hab.estado]));
       })) : h('div', { class: 'alert alert-info' }, 'No hay habitaciones registradas. Agréguelas en la sección Habitaciones.'),
       h('div', { class: 'legend' }, Object.keys(ESTADOS).map((e) => h('span', {}, h('span', { class: 'dot', style: undefined, 'data-e': e }), ESTADOS[e]))));
@@ -223,7 +223,7 @@ async function vistaTablero(main) {
       botones.push(h('button', { class: 'btn btn-brass', onclick: () => cambiar('DISPONIBLE', `Habitación ${hab.numero} habilitada`) }, 'Habilitar'));
     } else if (a) {
       botones.push(h('button', { class: 'btn btn-danger', onclick: async () => {
-        if (!(await confirmar('Registrar check-out', `Se registrará la salida de ${a.pasajero_nombre} y la habitación ${hab.numero} pasará a "En limpieza".`, 'Confirmar check-out', 'btn-danger'))) return;
+        if (!(await confirmar('Registrar check-out', `Se registrará la salida de ${a.pasajero_nombre || 'el pasajero'} y la habitación ${hab.numero} pasará a "En limpieza".`, 'Confirmar check-out', 'btn-danger'))) return;
         accion(() => api('POST', `/api/asignaciones/${a.id}/checkout`), `Check-out registrado. Habitación ${hab.numero} en limpieza`, () => cerrar());
       } }, 'Registrar check-out'));
     }
@@ -234,7 +234,7 @@ async function vistaTablero(main) {
         h('dt', {}, 'Orientación'), h('dd', {}, ORIENT[hab.orientacion]),
         h('dt', {}, 'Capacidad máxima'), h('dd', {}, hab.capacidad_maxima),
         ...(a ? [
-          h('dt', {}, 'Pasajero responsable'), h('dd', {}, a.pasajero_nombre),
+          h('dt', {}, 'Pasajero responsable'), h('dd', {}, a.pasajero_nombre || '—'),
           h('dt', {}, 'RUT'), h('dd', {}, fmtRut(a.pasajero_rut)),
           h('dt', {}, 'Ocupantes'), h('dd', {}, a.cantidad_ocupantes),
           h('dt', {}, 'Acompañantes'), h('dd', {}, a.acompanantes || '—'),
@@ -256,19 +256,29 @@ async function vistaTablero(main) {
 async function vistaBoleta(main,grupoId,esNueva=false) {
   const b=await api('GET',`/api/boletas/${encodeURIComponent(grupoId)}`);
   const linea=(k,v)=>[h('dt',{},k),h('dd',{},v)];
+  // Datos del emisor: ficticios y fijos (no dependen de lo que escriba el usuario)
+  const emisor=b.emisor||{nombre:'Hotel Duerme Bien',rut:'',calle:'',comuna:'',telefono:''};
   main.replaceChildren(encabezado('Boleta de estadía',esNueva?'Asignación registrada correctamente':'Comprobante de la estadía'),
     h('section',{class:'boleta',id:'boleta'},
-      h('div',{class:'boleta-marca'},h('h2',{},'Hotel Duerme Bien'),h('p',{},'Comprobante informativo de alojamiento')),
+      h('div',{class:'boleta-marca'},
+        h('h2',{},emisor.nombre),
+        h('p',{},`${emisor.calle}${emisor.comuna?', '+emisor.comuna:''}${emisor.telefono?' · Tel. '+emisor.telefono:''}`),
+        h('p',{},'Comprobante informativo de alojamiento')),
+      h('dl',{class:'kv boleta-emisor'},
+        ...linea('Nombre',emisor.nombre),
+        ...linea('RUT',fmtRut(emisor.rut)),
+        ...linea('Calle',`${emisor.calle}${emisor.comuna?', '+emisor.comuna:''}`),
+        ...linea('Teléfono',emisor.telefono||'—')),
       h('div',{class:'boleta-meta'},h('strong',{},`Boleta ${b.numero}`),h('span',{},`Emitida: ${fmtTS(b.emitidaEn)}`)),
       h('dl',{class:'kv'},
-        ...linea('Responsable',b.responsable.nombre),...linea('RUT responsable',fmtRut(b.responsable.rut)),
+        ...linea('Responsable',b.responsable.nombre||'—'),...linea('RUT responsable',fmtRut(b.responsable.rut)),
         ...linea('Fecha de entrada',fmtFecha(b.fechaEntrada)),...linea('Salida estimada',fmtFecha(b.fechaSalidaEstimada)),
         ...linea('Noches',b.noches),...linea('Pasajeros',b.totalPersonas),
         ...linea('Tarifa por persona/noche',fmtCLP(b.tarifaPorPersonaNoche))),
       h('h3',{},'Detalle de alojamiento'),
       tabla(['Habitación','Pasajeros identificados (RUT)','Personas','Subtotal'],b.habitaciones.map(x=>[
         `${x.numero} · ${TIPOS[x.tipo]||x.tipo}`,
-        h('div',{},x.ocupantes.map(p=>h('div',{},`${p.nombre_completo} — ${fmtRut(p.rut)}`))),
+        h('div',{},(x.ocupantes||[]).map(p=>h('div',{},`${p.nombre_completo} — ${fmtRut(p.rut)}`))),
         x.cantidad,fmtCLP(x.subtotal)])),
       h('div',{class:'boleta-total'},'TOTAL ESTADÍA',h('strong',{},fmtCLP(b.total))),
       h('p',{class:'hint'},b.tipo)),
@@ -284,7 +294,7 @@ async function vistaAsignar(main, params) {
   const libres = habs.filter((x) => x.estado === 'DISPONIBLE');
   const tarifa = cfg.tarifaPorPasajero;
 
-  const nombre = h('input', { type: 'text', maxlength: '100', placeholder: 'Ej: Ana Torres Muñoz' });
+  const nombre = h('input', { type: 'text', maxlength: '100', minlength: '5', placeholder: 'Ej: Ana Torres Muñoz', required: true, autocomplete: 'off' });
   const rut = h('input', { type: 'text', maxlength: '12', placeholder: '12.345.678-5' });
   const email = h('input', { type: 'email', maxlength: '120', placeholder: 'opcional' });
   const tel = h('input', { type: 'tel', maxlength: '20', placeholder: 'opcional' });
@@ -318,7 +328,7 @@ async function vistaAsignar(main, params) {
     const posicion=filas.indexOf(f);
     const n=Math.max(0,Math.min(10,(Number(f.ocu.value)||0)-(posicion===0?1:0)));
     while (f.personas.length < n) {
-      const nombre=h('input',{type:'text',maxlength:'100',placeholder:'Nombre y apellidos',required:true});
+      const nombre=h('input',{type:'text',maxlength:'100',minlength:'5',placeholder:'Nombre y apellidos',required:true,autocomplete:'off'});
       const rut=h('input',{type:'text',maxlength:'12',placeholder:'12.345.678-5',required:true});
       f.personas.push({nombre,rut});
     }
@@ -384,7 +394,7 @@ async function vistaAsignar(main, params) {
     btnEnviar.disabled = false;
   } },
     h('h2', {}, 'Pasajero responsable'), h('div', { class: 'sub' }, 'Persona que responde por la estadía (si es un grupo, quien queda a cargo)'),
-    h('div', { class: 'row2' }, campo('Nombre completo', nombre), h('div', {}, campo('RUT', rut), notaRut)),
+    h('div', { class: 'row2' }, campo('Nombre completo', nombre, 'Debe incluir nombre y apellido (mínimo dos palabras).'), h('div', {}, campo('RUT', rut), notaRut)),
     h('div', { class: 'row2' }, campo('Correo electrónico', email), campo('Teléfono', tel)),
     h('div', { class: 'divider' }),
     h('h2', {}, 'Estadía'), h('div', { class: 'sub' }, 'La fecha de entrada corresponde al check-in de hoy'),
@@ -455,9 +465,9 @@ async function vistaHospedados(main) {
   const activas = await api('GET', '/api/asignaciones/activas');
   main.replaceChildren(encabezado('Pasajeros hospedados', `${activas.length} habitaciones con huéspedes actualmente`),
     tabla(['Habitación', 'Responsable', 'RUT', 'Ocupantes', 'Acompañantes identificados', 'Entrada', 'Salida est.', 'Noches', 'Costo', ''],
-      activas.map((a) => [h('b', {}, a.habitacion_numero), a.pasajero_nombre, fmtRut(a.pasajero_rut), a.cantidad_ocupantes, h('div',{},(a.ocupantes_detalle||[]).filter(p=>!p.es_responsable).map(p=>h('div',{},`${p.nombre_completo} · ${fmtRut(p.rut)}`))), fmtFecha(a.fecha_entrada), fmtFecha(a.fecha_salida_estimada), a.noches, fmtCLP(a.costo_total),
+      activas.map((a) => [h('b', {}, a.habitacion_numero), a.pasajero_nombre || '—', fmtRut(a.pasajero_rut), a.cantidad_ocupantes, h('div',{},(a.ocupantes_detalle||[]).filter(p=>!p.es_responsable).map(p=>h('div',{},`${p.nombre_completo} · ${fmtRut(p.rut)}`))), fmtFecha(a.fecha_entrada), fmtFecha(a.fecha_salida_estimada), a.noches, fmtCLP(a.costo_total),
         acciones(h('button', { class: 'btn btn-danger btn-sm', onclick: async () => {
-          if (!(await confirmar('Registrar check-out', `Salida de ${a.pasajero_nombre} (habitación ${a.habitacion_numero}). La habitación pasará a "En limpieza".`, 'Confirmar check-out', 'btn-danger'))) return;
+          if (!(await confirmar('Registrar check-out', `Salida de ${a.pasajero_nombre || 'el pasajero'} (habitación ${a.habitacion_numero}). La habitación pasará a "En limpieza".`, 'Confirmar check-out', 'btn-danger'))) return;
           try { await api('POST', `/api/asignaciones/${a.id}/checkout`); toast('Check-out registrado'); render(); } catch (ex) { if (ex.status !== 401) toast(ex.message, 'err'); }
         } }, 'Check-out'))]), 'No hay pasajeros hospedados en este momento.'));
 }
@@ -484,7 +494,7 @@ async function vistaHistorial(main) {
       const filas = await api('GET', `/api/historial?${q}`);
       resultados.replaceChildren(h('p', { class: 'hint' }, rut.value.trim() || hab.value ? `${filas.length} estadías encontradas` : 'Últimas estadías registradas (máximo 100)'),
         tabla(['Registrada', 'Habitación', 'Pasajero responsable', 'RUT', 'Ocup.', 'Entrada', 'Salida', 'Noches', 'Estado', 'Costo', 'Boleta'],
-          filas.map((a) => [fmtTS(a.creado_en), a.habitacion_numero, a.pasajero_nombre, fmtRut(a.pasajero_rut), a.cantidad_ocupantes, fmtFecha(a.fecha_entrada), a.fecha_salida_real ? fmtTS(a.fecha_salida_real) : `${fmtFecha(a.fecha_salida_estimada)} (est.)`, a.noches, h('span', { class: `pill ${a.estado}` }, a.estado === 'ACTIVA' ? 'Activa' : 'Finalizada'), fmtCLP(a.costo_total),h('button',{class:'btn btn-brass btn-sm',onclick:()=>vistaBoleta(main,a.grupo_id).catch(e=>toast(e.message,'err'))},'Ver boleta')]),
+          filas.map((a) => [fmtTS(a.creado_en), a.habitacion_numero, a.pasajero_nombre || '—', fmtRut(a.pasajero_rut), a.cantidad_ocupantes, fmtFecha(a.fecha_entrada), a.fecha_salida_real ? fmtTS(a.fecha_salida_real) : `${fmtFecha(a.fecha_salida_estimada)} (est.)`, a.noches, h('span', { class: `pill ${a.estado}` }, a.estado === 'ACTIVA' ? 'Activa' : 'Finalizada'), fmtCLP(a.costo_total),h('button',{class:'btn btn-brass btn-sm',onclick:()=>vistaBoleta(main,a.grupo_id).catch(e=>toast(e.message,'err'))},'Ver boleta')]),
           'No hay estadías para los filtros indicados.'));
     } catch (ex) { if (ex.status !== 401) { err.textContent = ex.message; err.classList.remove('hidden'); resultados.replaceChildren(); } }
   }

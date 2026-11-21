@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const V = require('./validadores');
 const { AppError } = require('../errors');
 const { crearRepos } = require('../data/repositorios');
+const { EMISOR } = require('./reglas');
 const ETIQUETA = { DISPONIBLE:'Disponible',OCUPADA:'Ocupada',EN_LIMPIEZA:'En limpieza',EN_MANTENIMIENTO:'En mantenimiento' };
 
 function crearAsignacionService(repos, db, config) {
@@ -118,8 +119,17 @@ function crearAsignacionService(repos, db, config) {
       const registros=await repos.asignaciones.porGrupo(grupoId);
       if (!registros.length) throw new AppError(404,'Estadía no encontrada.','NO_ENCONTRADO');
       const a=registros[0];
+      // Los datos del huésped se leen del snapshot del check-in (ocupantes_detalle), no del registro
+      // vivo del pasajero: así la boleta de una estadía antigua nunca cambia si el pasajero se
+      // vuelve a registrar más adelante con otro nombre.
+      const detalleResponsable=(a.ocupantes_detalle||[]).find((d)=>d&&d.es_responsable);
       return { numero:`DB-${a.grupo_id.slice(0,8).toUpperCase()}`,grupoId,emitidaEn:a.creado_en,
-        creadoEn:a.creado_en,responsable:{nombre:a.pasajero_nombre,rut:a.pasajero_rut},
+        creadoEn:a.creado_en,
+        emisor:{ nombre:config.HOTEL_NOMBRE||EMISOR.nombre,rut:config.HOTEL_RUT||EMISOR.rut,
+          calle:config.HOTEL_CALLE||EMISOR.calle,comuna:config.HOTEL_COMUNA||EMISOR.comuna,
+          telefono:config.HOTEL_TELEFONO||EMISOR.telefono },
+        responsable:{ nombre:detalleResponsable?.nombre_completo||a.pasajero_nombre,
+          rut:detalleResponsable?.rut||a.pasajero_rut },
         fechaEntrada:a.fecha_entrada,fechaSalidaEstimada:a.fecha_salida_estimada,noches:a.noches,
         tarifaPorPersonaNoche:a.tarifa_noche,totalPersonas:registros.reduce((s,x)=>s+x.cantidad_ocupantes,0),
         habitaciones:registros.map(x=>({numero:x.habitacion_numero,tipo:x.habitacion_tipo,
